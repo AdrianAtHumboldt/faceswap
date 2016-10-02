@@ -50,7 +50,8 @@ import numpy
 import sys
 
 PREDICTOR_PATH = "../shape_predictor_68_face_landmarks.dat"
-SCALE_FACTOR = 1 
+FACE_SCALE_FACTOR = 1 
+CAMERA_SCALE_FACTOR = 2
 FEATHER_AMOUNT = 11
 
 FACE_POINTS = list(range(17, 68))
@@ -83,13 +84,13 @@ predictor = dlib.shape_predictor(PREDICTOR_PATH)
 class NoFaces(Exception):
     pass
 
-def get_landmarks(im):
+def get_landmarks(im, scale = 1):
     rects = detector(im, 1)
     
     if len(rects) == 0:
         raise NoFaces
 
-    return numpy.matrix([[p.x, p.y] for p in predictor(im, rects[0]).parts()])
+    return numpy.matrix([[p.x * scale, p.y * scale] for p in predictor(im, rects[0]).parts()])
 
 def annotate_landmarks(im, landmarks):
     im = im.copy()
@@ -162,8 +163,8 @@ def transformation_from_points(points1, points2):
 
 def read_im_and_landmarks(fname):
     im = cv2.imread(fname, cv2.IMREAD_COLOR)
-    im = cv2.resize(im, (im.shape[1] * SCALE_FACTOR,
-                         im.shape[0] * SCALE_FACTOR))
+    im = cv2.resize(im, (im.shape[1] * FACE_SCALE_FACTOR,
+                         im.shape[0] * FACE_SCALE_FACTOR))
     s = get_landmarks(im)
 
     return im, s
@@ -205,10 +206,12 @@ try:
     while(True):
         # Capture frame-by-frame
         ret, im1 = cap.read()
+        resized = cv2.resize(im1, (im1.shape[1] / CAMERA_SCALE_FACTOR,
+                         im1.shape[0] / CAMERA_SCALE_FACTOR))
     
         # Our operations on the frame come here
         try:
-            landmarks1 = get_landmarks(im1)
+            landmarks1 = get_landmarks(resized, CAMERA_SCALE_FACTOR)
             
             M = transformation_from_points(landmarks1[ALIGN_POINTS],
                                            landmarks2[ALIGN_POINTS])
