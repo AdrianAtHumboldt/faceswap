@@ -49,7 +49,7 @@ import numpy
 
 import sys
 
-PREDICTOR_PATH = "/home/matt/dlib-18.16/shape_predictor_68_face_landmarks.dat"
+PREDICTOR_PATH = "../shape_predictor_68_face_landmarks.dat"
 SCALE_FACTOR = 1 
 FEATHER_AMOUNT = 11
 
@@ -80,17 +80,12 @@ COLOUR_CORRECT_BLUR_FRAC = 0.6
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(PREDICTOR_PATH)
 
-class TooManyFaces(Exception):
-    pass
-
 class NoFaces(Exception):
     pass
 
 def get_landmarks(im):
     rects = detector(im, 1)
     
-    if len(rects) > 1:
-        raise TooManyFaces
     if len(rects) == 0:
         raise NoFaces
 
@@ -199,21 +194,43 @@ def correct_colours(im1, im2, landmarks1):
     return (im2.astype(numpy.float64) * im1_blur.astype(numpy.float64) /
                                                 im2_blur.astype(numpy.float64))
 
-im1, landmarks1 = read_im_and_landmarks(sys.argv[1])
-im2, landmarks2 = read_im_and_landmarks(sys.argv[2])
-
-M = transformation_from_points(landmarks1[ALIGN_POINTS],
-                               landmarks2[ALIGN_POINTS])
-
+# im1, landmarks1 = read_im_and_landmarks(sys.argv[1])
+im2, landmarks2 = read_im_and_landmarks(sys.argv[1])
 mask = get_face_mask(im2, landmarks2)
-warped_mask = warp_im(mask, M, im1.shape)
-combined_mask = numpy.max([get_face_mask(im1, landmarks1), warped_mask],
-                          axis=0)
 
-warped_im2 = warp_im(im2, M, im1.shape)
-warped_corrected_im2 = correct_colours(im1, warped_im2, landmarks1)
+cap = cv2.VideoCapture(0)
+try:
+    cv2.namedWindow('frame')
+    
+    while(True):
+        # Capture frame-by-frame
+        ret, im1 = cap.read()
+    
+        # Our operations on the frame come here
+        try:
+            landmarks1 = get_landmarks(im1)
+            
+            M = transformation_from_points(landmarks1[ALIGN_POINTS],
+                                           landmarks2[ALIGN_POINTS])
+            
+            warped_mask = warp_im(mask, M, im1.shape)
+            combined_mask = numpy.max([get_face_mask(im1, landmarks1), warped_mask],
+                                      axis=0)
+            
+            warped_im2 = warp_im(im2, M, im1.shape)
+            warped_corrected_im2 = correct_colours(im1, warped_im2, landmarks1)
+            
+            output_im = (im1 * (1.0 - combined_mask) + warped_corrected_im2 * combined_mask) / 256.0
+    
+            cv2.imshow('frame', output_im)
+        except NoFaces:
+            cv2.imshow('frame', im1)
+            
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+finally:
+    # When everything done, release the capture
+    cap.release()
+    cv2.destroyAllWindows()
 
-output_im = im1 * (1.0 - combined_mask) + warped_corrected_im2 * combined_mask
-
-cv2.imwrite('output.jpg', output_im)
 
